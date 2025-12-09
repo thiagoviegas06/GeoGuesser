@@ -1,2 +1,7 @@
 /kaggle_dataset
+<<<<<<< Updated upstream
 *.zip
+=======
+*.zip
+*.pth
+>>>>>>> Stashed changes
