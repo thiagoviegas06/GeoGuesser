@@ -12,9 +12,21 @@
 #SBATCH --job-name=CV-GeoLocation
 #SBATCH --output=slurm-geolocation-%j.out
 
-module purge
 
+if [ -n "$1" ]; then 
+	# Looking to resume training from checkpoint
+	echo "Resuming from checkpoint: $1"
+	ARGS="--checkpoint $1"
+
+else
+	#Training from 0
+	ARGS=""
+
+fi 
+
+module purge
+	
 singularity exec --nv \
 	    --overlay /scratch/$USER/computerVision/pytorch_env.ext3:ro \
 	    /scratch/work/public/singularity/cuda12.8.1-cudnn9.8.0-ubuntu24.04.2.sif\
-	    /bin/bash -c "source /ext3/env.sh; python train.py"
+	    /bin/bash -c "source /ext3/env.sh; python train.py $ARGS"

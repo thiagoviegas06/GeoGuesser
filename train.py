@@ -46,19 +46,54 @@ def calculate_score(state_logits, gps_pred, state_targets, gps_targets):
     
     return avg_class_score, mse
 
-def train_and_validate(csv_path, image_dir):
+def train_and_validate(args):
     # Setup Data
-    train_loader, val_loader, _ = create_dataloaders(csv_path, image_dir, BATCH_SIZE)
+    train_loader, val_loader, _ = create_dataloaders(args.csv_path, args.image_dir, BATCH_SIZE)
     
     # Setup Model
     model = StreetCLIPMultiTask(num_states=50).to(DEVICE)
     
+    checkpoint_loaded = False
+    if args.checkpoint:
+        print(f"Resuming training from checkpoint: {args.checkpoint}")
+        try:
+            # Load the state dictionary
+            checkpoint = torch.load(args.checkpoint, map_location=DEVICE)
+            
+            # Handle cases where the checkpoint might be the full model object or just state_dict
+            if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+                # Common pattern if saving optimizer state + model state
+                model.load_state_dict(checkpoint['state_dict'])
+            elif isinstance(checkpoint, dict):
+                # Standard state_dict save
+                model.load_state_dict(checkpoint)
+            else:
+                # If entire model was saved (not recommended but possible)
+                model.load_state_dict(checkpoint.state_dict())
+                
+            print("Checkpoint loaded successfully.")
+            checkpoint_loaded = True
+
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+            return
+    else:
+        print("No checkpoint provided. Starting fresh training.")
+
     # Optimization
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
     criterion_class = nn.CrossEntropyLoss()
     criterion_gps = nn.MSELoss() 
     
     best_val_score = -float('inf')
+
+    if checkpoint_loaded:
+        print("Running initial validation to set baseline score...")
+        val_c, val_g = validate(model, val_loader, DEVICE, desc="Initial Val")
+        # Metric: Maximize Class Score, Minimize GPS Error
+        best_val_score = val_c - (val_g * 0.001)
+        print(f"Baseline loaded: Class Score: {val_c:.4f}, GPS MSE: {val_g:.4f}, Best Score: {best_val_score:.4f}")
+        print("-" * 30)
     
     for epoch in range(NUM_EPOCHS):
         # --- TRAINING LOOP ---
@@ -131,13 +166,21 @@ def train_and_validate(csv_path, image_dir):
             print(">>> New Best Model Saved!")
         print("-" * 30)
 
+
 if __name__ == "__main__":
     print(torch.cuda.is_available())
     if DEVICE != "cuda":
         raise ImportError("Warning: CUDA device not available. Training will be slow on CPU.")
+    
+    parser = argparse.ArgumentParser(description="Train StreetCLIP for Geolocalization")
+    # Required arguments
+    parser.add_argument('--csv_path', type=str, default='kaggle_dataset/train_ground_truth.csv', help='Path to ground truth CSV')
+    parser.add_argument('--image_dir', type=str, default='kaggle_dataset/train_images/', help='Path to image directory')
+    
+    # Optional checkpoint flag
+    parser.add_argument('--checkpoint', type=str, default=None, help='Path to .pth file to resume training')
+    
+    args = parser.parse_args()
+    
+    train_and_validate(args)
 
-    # Ensure you provide the correct paths
-    train_and_validate(
-        csv_path='kaggle_dataset/train_ground_truth.csv', 
-        image_dir='kaggle_dataset/train_images/'
-    )
