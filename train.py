@@ -47,6 +47,32 @@ def calculate_score(state_logits, gps_pred, state_targets, gps_targets):
     
     return avg_class_score, mse
 
+def validate(model, val_loader, device, desc="Validation"):
+    """
+    Runs a validation pass and returns average scores.
+    """
+    model.eval()
+    val_class_score = 0
+    val_gps_mse = 0
+    
+    with torch.no_grad():
+        for batch in tqdm(val_loader, desc=desc):
+            pixel_values = batch['pixel_values'].to(device)
+            state_targets = batch['state_idx'].to(device)
+            gps_targets = batch['gps'].to(device)
+            
+            state_logits, gps_pred = model(pixel_values)
+            
+            c_score, g_mse = calculate_score(state_logits, gps_pred, state_targets, gps_targets)
+            val_class_score += c_score
+            val_gps_mse += g_mse
+    
+    avg_val_class_score = val_class_score / len(val_loader)
+    avg_val_gps_mse = val_gps_mse / len(val_loader)
+    
+    return avg_val_class_score, avg_val_gps_mse
+
+
 def train_and_validate(args):
     # Setup Data
     train_loader, val_loader, _ = create_dataloaders(args.csv_path, args.image_dir, BATCH_SIZE)
@@ -130,22 +156,9 @@ def train_and_validate(args):
         avg_train_loss = train_loss / len(train_loader)
         
         # --- VALIDATION LOOP ---
-        model.eval()
-        val_class_score = 0
-        val_gps_mse = 0
-        
-        with torch.no_grad():
-            for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{NUM_EPOCHS} [Val]"):
-                pixel_values = batch['pixel_values'].to(DEVICE)
-                state_targets = batch['state_idx'].to(DEVICE)
-                gps_targets = batch['gps'].to(DEVICE)
-                
-                state_logits, gps_pred = model(pixel_values)
-                
-                # Calculate metric scores
-                c_score, g_mse = calculate_score(state_logits, gps_pred, state_targets, gps_targets)
-                val_class_score += c_score
-                val_gps_mse += g_mse
+        avg_val_class_score, avg_val_gps_mse = validate(
+            model, val_loader, DEVICE, desc=f"Epoch {epoch+1}/{NUM_EPOCHS} [Val]"
+        )
         
         avg_val_class_score = val_class_score / len(val_loader)
         avg_val_gps_mse = val_gps_mse / len(val_loader)
