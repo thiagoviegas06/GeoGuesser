@@ -1,3 +1,4 @@
+import argparse
 from config import BATCH_SIZE, LEARNING_RATE, NUM_EPOCHS
 from data_loader import create_dataloaders
 from model import StreetCLIPMultiTask
