@@ -160,9 +160,6 @@ def train_and_validate(args):
             model, val_loader, DEVICE, desc=f"Epoch {epoch+1}/{NUM_EPOCHS} [Val]"
         )
         
-        avg_val_class_score = val_class_score / len(val_loader)
-        avg_val_gps_mse = val_gps_mse / len(val_loader)
-        
         # Construct a composite metric for "Best Model" selection
         # Since we want High Class Score and Low GPS Error:
         # We can treat GPS MSE as a penalty.
