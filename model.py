@@ -8,7 +8,7 @@ class StreetCLIPMultiTask(nn.Module):
         self.backbone = CLIPVisionModel.from_pretrained("geolocal/StreetCLIP")
         hidden_size = self.backbone.config.hidden_size 
 
-        # State Classification
+        # State Classification 
         self.state_classifier = nn.Linear(hidden_size, num_states)
         
         # GPS Regression

@@ -104,3 +104,117 @@ def create_dataloaders(csv_path, image_dir, batch_size=16):
     )
     
     return train_loader, val_loader, processor
+
+def create_test_dataloader(csv_path, image_dir, batch_size=16):
+    """
+    Creates DataLoader for test dataset.
+    """
+    # Load Data
+    df = pd.read_csv(csv_path)
+    
+    # Initialize Processor 
+    processor = CLIPProcessor.from_pretrained("geolocal/StreetCLIP")
+    
+    # Create Dataset
+    test_dataset = StreetViewDataset(df, image_dir, processor, is_test=True)
+    
+    # Create Loader
+    test_loader = DataLoader(
+        test_dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=4, 
+        pin_memory=True
+    )
+    
+    return test_loader, processor
+
+
+class DirectionalImagesDataset(Dataset):
+    """
+    Dataset for test images organized by direction (north, east, south, west).
+    Does not require a CSV file - images are loaded directly from the directory structure.
+    """
+    def __init__(self, image_dir, processor):
+        self.image_dir = image_dir
+        self.processor = processor
+        
+        # Get all unique image IDs by scanning the directory
+        image_files = os.listdir(image_dir)
+        image_ids = set()
+        for img_file in image_files:
+            # Extract image ID supporting both 'image_' and 'img_' prefixes
+            parts = img_file.split('_')
+            if len(parts) >= 3 and parts[0] in {"image", "img"}:
+                image_id = parts[1]
+                image_ids.add(image_id)
+        
+        self.image_ids = sorted(list(image_ids))
+    
+    def __len__(self):
+        return len(self.image_ids)
+    
+    def __getitem__(self, idx):
+        image_id = self.image_ids[idx]
+        directions = ['north', 'east', 'south', 'west']
+        images = []
+        
+        for direction in directions:
+            # Try both filename patterns
+            candidates = [
+                os.path.join(self.image_dir, f"image_{image_id}_{direction}.jpg"),
+                os.path.join(self.image_dir, f"img_{image_id}_{direction}.jpg"),
+            ]
+            image = None
+            for img_path in candidates:
+                image = cv2.imread(img_path)
+                if image is not None:
+                    break
+            
+            if image is None:
+                # Fallback for missing/corrupt images
+                image = np.zeros((256, 256, 3), dtype=np.uint8)
+            else:
+                # Convert BGR to RGB
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            images.append(image)
+        
+        # Process images using CLIP processor
+        inputs = self.processor(images=images, return_tensors="pt", padding=True)
+        pixel_values = inputs['pixel_values']
+        
+        return {
+            'pixel_values': pixel_values,
+            'image_id': image_id
+        }
+
+
+def create_directional_test_dataloader(test_image_dir, batch_size=16):
+    """
+    Creates DataLoader for test images organized by direction (north, east, south, west).
+    
+    Args:
+        test_image_dir: Path to directory containing images named as "image_{id}_{direction}.jpg"
+        batch_size: Batch size for DataLoader
+    
+    Returns:
+        test_loader: DataLoader for test images
+        processor: CLIPProcessor instance
+    """
+    # Initialize Processor
+    processor = CLIPProcessor.from_pretrained("geolocal/StreetCLIP")
+    
+    # Create Dataset
+    test_dataset = DirectionalImagesDataset(test_image_dir, processor)
+    
+    # Create Loader
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True
+    )
+    
+    return test_loader, processor
