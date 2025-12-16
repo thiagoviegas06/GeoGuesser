@@ -57,10 +57,10 @@ def validate(model, val_loader, device, desc="Validation"):
     return avg_val_class_score, avg_val_gps_mse
 
 
-def train_and_validate(args):
+def train_and_validate(args, batch_size=4):
     # Data
     train_loader, val_loader, _ = create_dino_dataloaders(
-        args.csv_path, args.image_dir, batch_size=BATCH_SIZE, model_name=args.model_name
+        args.csv_path, args.image_dir, batch_size=batch_size, model_name=args.model_name
     )
 
     # Model
@@ -147,9 +147,10 @@ def main():
     parser.add_argument('--image_dir', type=str, default='kaggle_dataset/train_images/', help='Path to image directory')
     parser.add_argument('--checkpoint', type=str, default=None, help='Path to .pth file to resume training')
     parser.add_argument('--model_name', type=str, default='facebook/dinov2-base', help='DINOv2 model name')
+    parser.add_argument('--batch_size', type=int, default=4, help='Batch size for training (default 4 for CPU, use 16-32 for GPU)')
     args = parser.parse_args()
 
-    train_and_validate(args)
+    train_and_validate(args, batch_size=args.batch_size)
 
 
 if __name__ == "__main__":
