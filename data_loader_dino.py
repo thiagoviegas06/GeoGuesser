@@ -68,14 +68,14 @@ def create_dino_dataloaders(csv_path, image_dir, batch_size=16, model_name="face
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True,
     )
 
@@ -92,7 +92,7 @@ def create_dino_test_dataloader(csv_path, image_dir, batch_size=16, model_name="
         test_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True,
     )
 
