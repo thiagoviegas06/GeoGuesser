@@ -10,11 +10,13 @@ from sklearn.model_selection import train_test_split
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class StreetViewDataset(Dataset):
-    def __init__(self, df, image_dir, processor, is_test=False):
+    def __init__(self, df, image_dir, processor, is_test=False, augment_fn=None):
         self.df = df
         self.image_dir = image_dir
         self.processor = processor
         self.is_test = is_test
+        # Optional callable: augment_fn(np.ndarray) -> np.ndarray (RGB)
+        self.augment_fn = augment_fn
 
     def __len__(self):
         return len(self.df)
@@ -40,6 +42,14 @@ class StreetViewDataset(Dataset):
             else:
                 # Convert BGR (OpenCV standard) to RGB (CLIP requirement)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            # Apply augmentation only for training (not test) if provided
+            if (not self.is_test) and (self.augment_fn is not None):
+                try:
+                    image = self.augment_fn(image)
+                except Exception:
+                    # Fail-safe: if augmentation errors, skip it
+                    pass
             
             images.append(image)
 
@@ -68,7 +78,7 @@ class StreetViewDataset(Dataset):
                 'sample_id': row['sample_id']
             }
 
-def create_dataloaders(csv_path, image_dir, batch_size=16):
+def create_dataloaders(csv_path, image_dir, batch_size=16, use_augment=True):
     """
     Creates DataLoaders for training and validation.
     Splits the data 80/20.
@@ -82,9 +92,24 @@ def create_dataloaders(csv_path, image_dir, batch_size=16):
     # Initialize Processor 
     processor = CLIPProcessor.from_pretrained("geolocal/StreetCLIP")
     
+    # Define a simple, safe augmentation pipeline operating on RGB np arrays
+    def _default_augment(img_rgb: np.ndarray) -> np.ndarray:
+        # Random horizontal flip
+        if np.random.rand() < 0.5:
+            img_rgb = np.ascontiguousarray(np.flip(img_rgb, axis=1))
+        # Random brightness shift (-32..+32)
+        delta = np.random.uniform(-32, 32)
+        img_rgb = np.clip(img_rgb.astype(np.float32) + delta, 0, 255).astype(np.uint8)
+        # Random gaussian blur (p=0.3)
+        if np.random.rand() < 0.3:
+            img_rgb = cv2.GaussianBlur(img_rgb, (3, 3), 0)
+        return img_rgb
+
+    augment_fn = _default_augment if use_augment else None
+
     # Create Datasets
-    train_dataset = StreetViewDataset(train_df, image_dir, processor)
-    val_dataset = StreetViewDataset(val_df, image_dir, processor)
+    train_dataset = StreetViewDataset(train_df, image_dir, processor, is_test=False, augment_fn=augment_fn)
+    val_dataset = StreetViewDataset(val_df, image_dir, processor, is_test=False, augment_fn=None)
     
     # Create Loaders
     # num_workers can often be increased with OpenCV as it releases the GIL better than PIL in some versions
